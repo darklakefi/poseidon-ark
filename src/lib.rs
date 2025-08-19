@@ -8,6 +8,11 @@ use core::ops::{AddAssign, MulAssign};
 mod static_constants;
 use static_constants::*;
 
+// Static length constants to avoid runtime len() calls
+const N_ROUNDS_P_LEN: usize = 16; // N_ROUNDS_P has 16 elements
+const C_CONSTANTS_LEN: usize = 16; // C_CONSTANTS has 16 arrays  
+const M_CONSTANTS_LEN: usize = 16; // M_CONSTANTS has 16 arrays (first level)
+
 pub struct Poseidon;
 impl Poseidon {
     pub fn new() -> Poseidon {
@@ -50,7 +55,7 @@ impl Poseidon {
 
     pub fn hash(&self, inp: Vec<Fr>) -> Result<Fr, String> {
         let t = inp.len() + 1;
-        if inp.is_empty() || inp.len() > N_ROUNDS_P.len() {
+        if inp.is_empty() || inp.len() > N_ROUNDS_P_LEN {
             return Err("Wrong inputs length".to_string());
         }
         let n_rounds_f = N_ROUNDS_F;
@@ -142,7 +147,7 @@ mod tests {
             "4417881134626180770308697923359573201005643519861877412381846989312604493735"
         );
         assert_eq!(
-            C_CONSTANTS[C_CONSTANTS.len() - 1][0].to_string(),
+            C_CONSTANTS[C_CONSTANTS_LEN - 1][0].to_string(),
             "21579410516734741630578831791708254656585702717204712919233299001262271512412"
         );
         assert_eq!(
@@ -150,7 +155,7 @@ mod tests {
             "2910766817845651019878574839501801340070030115151021261302834310722729507541"
         );
         assert_eq!(
-            M_CONSTANTS[M_CONSTANTS.len() - 1][0][0].to_string(),
+            M_CONSTANTS[M_CONSTANTS_LEN - 1][0][0].to_string(),
             "11497693837059016825308731789443585196852778517742143582474723527597064448312"
         );
     }
