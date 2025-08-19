@@ -18,13 +18,13 @@ impl Poseidon {
     pub fn new() -> Poseidon {
         Poseidon
     }
-    pub fn ark(&self, state: &mut Vec<Fr>, c: &[Fr], it: usize) {
+    pub fn ark(&self, state: &mut [Fr], c: &[Fr], it: usize) {
         for i in 0..state.len() {
             state[i].add_assign(&c[it + i]);
         }
     }
 
-    pub fn sbox(&self, n_rounds_f: usize, n_rounds_p: usize, state: &mut Vec<Fr>, i: usize) {
+    pub fn sbox(&self, n_rounds_f: usize, n_rounds_p: usize, state: &mut [Fr], i: usize) {
         if i < n_rounds_f / 2 || i >= n_rounds_f / 2 + n_rounds_p {
             for j in 0..state.len() {
                 let aux = state[j];
@@ -40,20 +40,21 @@ impl Poseidon {
         }
     }
 
-    pub fn mix(&self, state: &Vec<Fr>, m: &[&[Fr]]) -> Vec<Fr> {
-        let mut new_state: Vec<Fr> = Vec::new();
+    pub fn mix_inplace(&self, state: &mut [Fr], temp_state: &mut [Fr], m: &[&[Fr]]) {
+        // Use pre-allocated temporary buffer instead of Vec::new()
         for i in 0..state.len() {
-            new_state.push(Fr::zero());
+            temp_state[i] = Fr::zero();
             for j in 0..state.len() {
                 let mut mij = m[i][j];
                 mij.mul_assign(&state[j]);
-                new_state[i].add_assign(&mij);
+                temp_state[i].add_assign(&mij);
             }
         }
-        new_state.clone()
+        // Copy back to state
+        state.copy_from_slice(temp_state);
     }
 
-    pub fn hash(&self, inp: Vec<Fr>) -> Result<Fr, String> {
+    pub fn hash_stack(&self, inp: &[Fr]) -> Result<Fr, String> {
         let t = inp.len() + 1;
         if inp.is_empty() || inp.len() > N_ROUNDS_P_LEN {
             return Err("Wrong inputs length".to_string());
@@ -61,16 +62,27 @@ impl Poseidon {
         let n_rounds_f = N_ROUNDS_F;
         let n_rounds_p = N_ROUNDS_P[t - 2];
 
-        let mut state = vec![Fr::zero(); t];
-        state[1..].clone_from_slice(&inp);
+        // Use stack-allocated arrays instead of Vec
+        let mut state = [Fr::zero(); 17]; // Max size based on N_ROUNDS_P_LEN + 1
+        let mut temp_state = [Fr::zero(); 17];
+        
+        // Initialize state
+        for i in 0..inp.len() {
+            state[i + 1] = inp[i];
+        }
 
         for i in 0..(n_rounds_f + n_rounds_p) {
-            self.ark(&mut state, C_CONSTANTS[t - 2], i * t);
-            self.sbox(n_rounds_f, n_rounds_p, &mut state, i);
-            state = self.mix(&state, M_CONSTANTS[t - 2]);
+            self.ark(&mut state[..t], C_CONSTANTS[t - 2], i * t);
+            self.sbox(n_rounds_f, n_rounds_p, &mut state[..t], i);
+            self.mix_inplace(&mut state[..t], &mut temp_state[..t], M_CONSTANTS[t - 2]);
         }
 
         Ok(state[0])
+    }
+
+    // Keep the old Vec-based method for compatibility but mark it as potentially problematic
+    pub fn hash(&self, inp: Vec<Fr>) -> Result<Fr, String> {
+        self.hash_stack(&inp)
     }
 
     // Helper functions for bytes conversion
