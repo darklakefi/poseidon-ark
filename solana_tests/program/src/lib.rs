@@ -5,8 +5,8 @@ use solana_program::{
     msg,
     program_error::ProgramError,
     pubkey::Pubkey,
-    poseidon::{hashv, Endianness, Parameters},
 };
+use poseidon_ark::Poseidon;
 
 entrypoint!(process_instruction);
 
@@ -19,33 +19,44 @@ pub fn process_instruction(
         return Err(ProgramError::InvalidInstructionData);
     }
     
+    let poseidon = Poseidon::new();
+    
     match instruction_data[0] {
         0 => {
-            // Poseidon hash with 1 input using native syscall
+            // Poseidon hash with 1 input using library (which uses Solana syscall)
             let input = &instruction_data[1..];
             if input.len() != 32 {
                 return Err(ProgramError::InvalidInstructionData);
             }
             
-            // Use Solana's native Poseidon syscall
-            let result = hashv(Parameters::Bn254X5, Endianness::LittleEndian, &[input])
-                .map_err(|_| ProgramError::InvalidInstructionData)?;
-            msg!("Poseidon1({} bytes): {:?}", input.len(), &result.to_bytes()[..8]);
+            let mut bytes = [0u8; 32];
+            bytes.copy_from_slice(input);
+            
+            match poseidon.hash_bytes(&[&bytes]) {
+                Ok(result) => {
+                    msg!("Poseidon1({} bytes): {:?}", input.len(), &result[..8]);
+                }
+                Err(_) => return Err(ProgramError::InvalidInstructionData),
+            }
         }
         1 => {
-            // Poseidon hash with 2 inputs using native syscall
+            // Poseidon hash with 2 inputs using library (which uses Solana syscall)
             let input = &instruction_data[1..];
             if input.len() != 64 {
                 return Err(ProgramError::InvalidInstructionData);
             }
             
-            let bytes1 = &input[0..32];
-            let bytes2 = &input[32..64];
+            let mut bytes1 = [0u8; 32];
+            let mut bytes2 = [0u8; 32];
+            bytes1.copy_from_slice(&input[0..32]);
+            bytes2.copy_from_slice(&input[32..64]);
             
-            // Use Solana's native Poseidon syscall with 2 inputs
-            let result = hashv(Parameters::Bn254X5, Endianness::LittleEndian, &[bytes1, bytes2])
-                .map_err(|_| ProgramError::InvalidInstructionData)?;
-            msg!("Poseidon2({} bytes): {:?}", input.len(), &result.to_bytes()[..8]);
+            match poseidon.hash_bytes(&[&bytes1, &bytes2]) {
+                Ok(result) => {
+                    msg!("Poseidon2({} bytes): {:?}", input.len(), &result[..8]);
+                }
+                Err(_) => return Err(ProgramError::InvalidInstructionData),
+            }
         }
         _ => {
             return Err(ProgramError::InvalidInstructionData);
